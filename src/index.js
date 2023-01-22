@@ -9,4 +9,4 @@ server.use(cors());
 
 const PORT = 5000;
 
-server.listen(PORT, () => {console.log("funfou")})
+server.listen(PORT)
