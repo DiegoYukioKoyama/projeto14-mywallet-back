@@ -1,37 +1,73 @@
-import bcrypt from "bcrypt"
-import { v4 as uuidV4 } from "uuid";
-import db from "../config/database.js"
+import bcrypt from "bcrypt";
+import db from "../config/database.js";
+import { User } from "../models/User.js";
+import { v4 as uuidV4} from "uuid"
+import { AuthToken } from "../models/AuthToken.js";
 
 export async function signIn(req, res) {
-    const { email, password } = req.body
-    try {
-        const checkUser = await db.collection("users").findOne({ email })
+  const { email, password } = req.body
+  try {
+    const user = await db.collection("users").findOne({ email });
 
-        if (!checkUser) return res.status(400).send("Usuário ou senha incorretos")
+    if (!user) return res.status(400).send('E-mail ou senha inválidos');
 
-        const isCorrectPassword = bcrypt.compareSync(password, checkUser.password)
+    const matchPasswords = await bcrypt.compare(password, user.password);
 
-        if (!isCorrectPassword) return res.status(400).send("Usuário ou senha incorretos")
+    if (!matchPasswords) return res.status(400).send('E-mail ou senha inválidos');
 
-        const token = uuidV4();
-        await db.collection("session").insertOne({ idUsuario: checkUser._id, token })
+    const token = new AuthToken()
 
-        return res.status(200).send(token)
-    } catch {
-        res.status(500).send(error.message)
-    }
+    await db.collection("sessions").updateOne({
+      email: user.email
+    }, {
+      $set: {
+        email: user.email,
+        token: token.uuid,
+        expire_at: token.expire_at
+      }
+    }, { upsert: true });
+
+    return res.send({
+      token: token.uuid,
+      name: user.name
+    });
+  } catch (error) {
+    return res.status(500).send(error);
+  }
 }
 
 export async function signUp(req, res) {
-    const { name, email, password } = req.body
-  
-    const passwordHashed = bcrypt.hashSync(password, 10)
-  
-    try {
-      await db.collection("users").insertOne({ name, email, password: passwordHashed })
-      res.status(201).send("Usuário cadastrado com sucesso!")
-  
-    } catch (error) {
-      res.status(500).send(error.message)
-    }
+  const { name, email, password } = req.body
+
+  try {
+    const CheckEmail = await db.collection("users").findOne({ email })
+    if (CheckEmail) return res.sendStatus(409)
+
+    const user = new User(name, email, bcrypt.hashSync(password, 10))
+
+    await db.collection("users").insertOne(user)
+
+    res.status(201).send("Usuário cadastrado com sucesso!")
+
+  } catch (error) {
+
+    res.status(500).send(error.message)
+
   }
+}
+
+export async function deleteToken(req, res) {
+  const { authorization } = req.headers
+  const token = authorization?.replace("Bearer ", '')
+
+  try {
+
+    await db.collection("sessions").deleteOne({ token })
+
+    return res.sendStatus(200)
+
+  } catch (error) {
+    return res.status(500).send(error.message)
+  }
+
+}

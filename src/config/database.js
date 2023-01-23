@@ -9,8 +9,8 @@ let db
 try {
     await mongoClient.connect()
     db = mongoClient.db()
-} catch {
-    res.status(500).send(err.message)
+} catch(error) {
+    console.log(error)
 }
 
 export default db
